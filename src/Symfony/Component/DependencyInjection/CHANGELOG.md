@@ -4,6 +4,9 @@ CHANGELOG
 8.1
 ---
 
+ * Add `AddBehaviorDescribingTagsPass` to allow bundles to extend the list of behavior-describing tags
+ * Add Kernel and Bundle infrastructure in the `Kernel\` subnamespace
+ * Add `$extensions` parameter to `MergeExtensionConfigurationPass` to ensure registered extensions are implicitly loaded
  * Add support for using service stacks as decorators, including `decorates_tag`
  * Add support for decorating all services with a specific tag using the `container.tag_decorator` resource tag or `#[AsTagDecorator]`
  * Add support for `SOURCE_DATE_EPOCH` environment variable

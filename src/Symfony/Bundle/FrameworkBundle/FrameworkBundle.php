@@ -42,13 +42,16 @@ use Symfony\Component\Console\ConsoleEvents;
 use Symfony\Component\Console\DependencyInjection\AddConsoleCommandPass;
 use Symfony\Component\Console\DependencyInjection\RegisterCommandArgumentLocatorsPass;
 use Symfony\Component\Console\DependencyInjection\RemoveEmptyCommandArgumentLocatorsPass;
+use Symfony\Component\DependencyInjection\Compiler\AddBehaviorDescribingTagsPass;
 use Symfony\Component\DependencyInjection\Compiler\PassConfig;
 use Symfony\Component\DependencyInjection\Compiler\RegisterReverseContainerPass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\Dotenv\Dotenv;
 use Symfony\Component\ErrorHandler\ErrorHandler;
+use Symfony\Component\EventDispatcher\DependencyInjection\AddEventAliasesPass;
 use Symfony\Component\EventDispatcher\DependencyInjection\RegisterListenersPass;
 use Symfony\Component\Form\DependencyInjection\FormPass;
+use Symfony\Component\Form\FormEvents;
 use Symfony\Component\HttpClient\DependencyInjection\HttpClientPass;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -91,6 +94,7 @@ use Symfony\Component\VarExporter\Internal\Registry;
 use Symfony\Component\Workflow\DependencyInjection\WorkflowDebugPass;
 use Symfony\Component\Workflow\DependencyInjection\WorkflowGuardListenerPass;
 use Symfony\Component\Workflow\DependencyInjection\WorkflowValidatorPass;
+use Symfony\Component\Workflow\WorkflowEvents;
 
 // Help opcache.preload discover always-needed symbols
 class_exists(ApcuAdapter::class);
@@ -141,22 +145,36 @@ class FrameworkBundle extends Bundle
     {
         parent::build($container);
 
-        $registerListenersPass = new RegisterListenersPass();
-        $registerListenersPass->setHotPathEvents([
-            KernelEvents::REQUEST,
-            KernelEvents::CONTROLLER,
-            KernelEvents::CONTROLLER_ARGUMENTS,
-            KernelEvents::RESPONSE,
-            KernelEvents::FINISH_REQUEST,
-        ]);
-        if (class_exists(ConsoleEvents::class)) {
-            $registerListenersPass->setNoPreloadEvents([
+        $container->addCompilerPass(new AddEventAliasesPass(
+            array_merge(
+                KernelEvents::ALIASES,
+                class_exists(ConsoleEvents::class) ? ConsoleEvents::ALIASES : [],
+                class_exists(FormEvents::class) ? FormEvents::ALIASES : [],
+                class_exists(WorkflowEvents::class) ? WorkflowEvents::ALIASES : [],
+            ),
+            [
+                KernelEvents::REQUEST,
+                KernelEvents::CONTROLLER,
+                KernelEvents::CONTROLLER_ARGUMENTS,
+                KernelEvents::RESPONSE,
+                KernelEvents::FINISH_REQUEST,
+            ],
+            class_exists(ConsoleEvents::class) ? [
                 ConsoleEvents::COMMAND,
                 ConsoleEvents::TERMINATE,
                 ConsoleEvents::ERROR,
-            ]);
-        }
+            ] : []
+        ));
 
+        $container->addCompilerPass(new AddBehaviorDescribingTagsPass([
+            'container.do_not_inline',
+            'container.service_locator',
+            'container.service_subscriber',
+            'kernel.event_subscriber',
+            'kernel.event_listener',
+            'kernel.locale_aware',
+            'kernel.reset',
+        ]), PassConfig::TYPE_BEFORE_OPTIMIZATION, 200);
         $container->addCompilerPass(new AssetsContextPass());
         $container->addCompilerPass(new LoggerPass(), PassConfig::TYPE_BEFORE_OPTIMIZATION, -32);
         $container->addCompilerPass(new RegisterControllerArgumentLocatorsPass());
@@ -170,7 +188,7 @@ class FrameworkBundle extends Bundle
         $container->addCompilerPass(new ProfilerPass());
         // must be registered before removing private services as some might be listeners/subscribers
         // but as late as possible to get resolved parameters
-        $container->addCompilerPass($registerListenersPass, PassConfig::TYPE_BEFORE_REMOVING);
+        $container->addCompilerPass(new RegisterListenersPass(), PassConfig::TYPE_BEFORE_REMOVING);
         $this->addCompilerPassIfExists($container, ControllerAttributesListenerPass::class, PassConfig::TYPE_BEFORE_REMOVING);
         $this->addCompilerPassIfExists($container, AddConstraintValidatorsPass::class);
         $this->addCompilerPassIfExists($container, AddValidatorInitializersPass::class);
